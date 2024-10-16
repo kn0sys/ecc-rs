@@ -1,0 +1,29 @@
+[package]
+name = "kn0sys-ecc-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nigel Christian <nigel.christian@hiahatf.org>"]
+documentation = "https://docs.rs/kn0sys-ecc-rs"
+description = "Intuitive library for elliptic curve cryptography tutorials"
+repository = "https://github.com/kn0sys/ecc-rs"
+license = "Apache-2.0"
+readme = "README.md"
+keywords = [
+    "cryptography",
+]
+categories = ["mathematics"]
+
+[lib]
+name = "kn0sys_ecc_rs"
+path = "src/lib.rs"
+
+[dependencies]
+curve25519-dalek = "4.1.3"
+hex = "0.4.3"
+log = "0.4.22"
+num = "0.4.3"
+rand = "0.8.5"
+sha2 = "0.10.8"
+
+[dev-dependencies]
+env_logger     = "0.11.5"
