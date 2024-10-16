@@ -1,9 +1,9 @@
 [package]
-name = "kn0sys-ecc-rs"
+name = "kn0syseccrs"
 version = "0.1.0"
 edition = "2021"
 authors = ["Nigel Christian <nigel.christian@hiahatf.org>"]
-documentation = "https://docs.rs/kn0sys-ecc-rs"
+documentation = "https://docs.rs/kn0syseccrs"
 description = "Intuitive library for elliptic curve cryptography tutorials"
 repository = "https://github.com/kn0sys/ecc-rs"
 license = "Apache-2.0"
@@ -14,7 +14,7 @@ keywords = [
 categories = ["mathematics"]
 
 [lib]
-name = "kn0sys_ecc_rs"
+name = "kn0syseccrs"
 path = "src/lib.rs"
 
 [dependencies]
