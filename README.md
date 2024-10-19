@@ -1,6 +1,6 @@
-# ecc-rs
+[![build](https://github.com/kn0sys/ecc-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/kn0sys/ecc-rs/actions/workflows/rust.yml)
 
-Intuitive libarary for elliptic curve cryptography tutorials
+# ecc-rs
 
 ## Developing
 
