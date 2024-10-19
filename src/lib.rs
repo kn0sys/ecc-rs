@@ -228,6 +228,24 @@ impl ScalarVector {
         }
         Ok(ScalarVector(value))
     }
+    pub fn sum_of_all(&self) -> Result<Scalar, EccError> {
+        let mut value: Vec<BigInt> = Vec::new();
+        for i in &self.0 {
+            value.push(BigInt::from_bytes_le(Sign::Plus, i.get_dalek().as_bytes()));
+        }
+        Scalar::new(value.iter().sum())
+    }
+    /// sv ** sv (inner product)
+    pub fn pow(&self, sv: ScalarVector) -> Result<Scalar, EccError> {
+        let len = self.0.len();
+        let mut z = Scalar::new(BigInt::from(0));
+        if len != sv.0.len() { return Err(EccError::ScalarVector) }
+        for i in 0..len {
+            let s = self.0[i].clone() * sv.0[i].clone();
+            z = z? + s?;
+        }
+        z
+    }
 }
 
 impl std::ops::Add<ScalarVector> for ScalarVector {
@@ -284,6 +302,17 @@ impl std::ops::Mul<Scalar> for ScalarVector {
     }
 }
 
+impl std::ops::Neg for ScalarVector {
+    type Output = Result<ScalarVector, EccError>;
+    fn neg(self) -> Result<ScalarVector, EccError> {
+        let mut value: Vec<Scalar> = Vec::new();
+        for i in 0..self.0.len() {
+            let s = -self.0[i].clone();
+            value.push(s?);
+        }
+        Ok(ScalarVector(value))
+    }
+}
 
 // Tests
 //-------------------------------------------------------------------------------
@@ -432,9 +461,95 @@ mod tests {
         }
         let sv1 = ScalarVector::new(v1);
         let sv2 = ScalarVector::new(v2);
-        let sv3= sv1.unwrap() + sv2.unwrap();
+        let sv3 = sv1.unwrap() + sv2.unwrap();
         let five = Scalar::new(BigInt::from(5));
         assert_eq!(sv3?.0[0].get_dalek(), five?.get_dalek());
+        Ok(())
+    }
+
+    #[test]
+    fn sub_scalar_vector_test() -> Result<(), EccError> {
+        let mut v1: Vec<BigInt> = Vec::new();
+        let mut v2: Vec<BigInt> = Vec::new();
+        for i in 1..7 {
+            if i < 4 {
+                v1.push(BigInt::from(i));
+            } else {
+                v2.push(BigInt::from(i));
+            }
+        }
+        let sv1 = ScalarVector::new(v1);
+        let sv2 = ScalarVector::new(v2);
+        let sv3 = sv1.unwrap() - sv2.unwrap();
+        let expected = "ead3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010".to_string();
+        assert_eq!(expected, sv3?.0[0].get_hex());
+        Ok(())
+    }
+
+    #[test]
+    fn mul_scalar_vector_test() -> Result<(), EccError> {
+        let mut v1: Vec<BigInt> = Vec::new();
+        let mut v2: Vec<BigInt> = Vec::new();
+        for i in 1..7 {
+            if i < 4 {
+                v1.push(BigInt::from(i));
+            } else {
+                v2.push(BigInt::from(i));
+            }
+        }
+        let sv1 = ScalarVector::new(v1);
+        let sv2 = ScalarVector::new(v2);
+        let sv3 = sv1.unwrap() * sv2.unwrap();
+        let expected = Scalar::new(BigInt::from(4));
+        assert_eq!(expected?.get_hex(), sv3?.0[0].get_hex());
+        Ok(())
+    }
+
+    #[test]
+    fn sum_all_scalar_vector_test() -> Result<(), EccError> {
+        let mut v1: Vec<BigInt> = Vec::new();
+        for i in 1..7 {
+            if i  < 4 {
+                v1.push(BigInt::from(i));
+            }
+        }
+        let sv1 = ScalarVector::new(v1);
+        let expected = Scalar::new(BigInt::from(6));
+        assert_eq!(expected?.get_hex(), sv1?.sum_of_all()?.get_hex());
+        Ok(())
+    }
+    
+    #[test]
+    fn neg_scalar_vector_test() -> Result<(), EccError> {
+        let mut v1: Vec<BigInt> = Vec::new();
+        for i in 1..7 {
+            if i  < 4 {
+                v1.push(BigInt::from(i));
+            }
+        }
+        let sv1 = ScalarVector::new(v1);
+        let expected = "ecd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010".to_string();
+        let r_sv = -sv1?;
+        assert_eq!(expected, r_sv?.0[0].get_hex());
+        Ok(())
+    }
+
+    #[test]
+    fn pow_scalar_vector_test() -> Result<(), EccError> {
+        let mut v1: Vec<BigInt> = Vec::new();
+        let mut v2: Vec<BigInt> = Vec::new();
+        for i in 1..7 {
+            if i < 4 {
+                v1.push(BigInt::from(i));
+            } else {
+                v2.push(BigInt::from(i));
+            }
+        }
+        let sv1 = ScalarVector::new(v1);
+        let sv2 = ScalarVector::new(v2);
+        let sv3 = sv1?.pow(sv2?);
+        let expected = "2000000000000000000000000000000000000000000000000000000000000000".to_string();
+        assert_eq!(expected, sv3?.get_hex());
         Ok(())
     }
 }
