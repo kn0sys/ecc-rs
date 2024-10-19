@@ -18,13 +18,13 @@ use sha2::{
 use rand::RngCore;
 
 /// L value as defined at https://eprint.iacr.org/2008/013.pdf
-const L: &str = "edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010";
+pub const L: &str = "edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010";
 
 fn l_as_big_int() -> BigInt {
     BigInt::from_bytes_le(Sign::Plus, &hex::decode(L).unwrap_or_default())
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Scalar {
     dalek: DalekScalar,
     hex: String,
@@ -38,8 +38,10 @@ pub struct Point {
 
 #[derive(Debug)]
 pub enum EccError {
+    Point,
+    PointVector,
     Scalar,
-    Point
+    ScalarVector,
 }
 
 fn big_int_to_array(mut n: BigInt) -> [u8; 32] {
@@ -57,10 +59,7 @@ fn to_hex (mut n: BigInt) -> String {
     for (index, _) in a.into_iter().enumerate() {
         let b: BigInt = &n & BigInt::from(255_u8);
         let s: &str = &format!("{b}");
-        let parse = match s.parse::<u8>() {
-            Ok(v) => v,
-            _=> 0,
-        };
+        let parse = s.parse::<u8>().unwrap_or_default();
         a[index] = parse;
         n = (&n - b) / BigInt::from(256_u16);
     }
@@ -218,6 +217,74 @@ pub fn hash_to_scalar(s: Vec<&str>) -> Result<Scalar, EccError> {
     }
 }
 
+#[derive(Debug)]
+pub struct ScalarVector(Vec<Scalar>);
+
+impl ScalarVector {
+    pub fn new(v: Vec<BigInt>) -> Result<Self, EccError> {
+        let mut value: Vec<Scalar> = Vec::new();
+        for i in v {
+            value.push(Scalar::new(i)?);
+        }
+        Ok(ScalarVector(value))
+    }
+}
+
+impl std::ops::Add<ScalarVector> for ScalarVector {
+    type Output = Result<ScalarVector, EccError>;
+    fn add(self, _rhs: ScalarVector) -> Result<ScalarVector, EccError> {
+        let mut value: Vec<Scalar> = Vec::new();
+        let len = self.0.len();
+        if len != _rhs.0.len() { return Err(EccError::ScalarVector) }
+        for i in 0..len {
+            let s = self.0[i].clone() + _rhs.0[i].clone();
+            value.push(s?);
+        }
+        Ok(ScalarVector(value))
+    }
+}
+
+impl std::ops::Sub<ScalarVector> for ScalarVector {
+    type Output = Result<ScalarVector, EccError>;
+    fn sub(self, _rhs: ScalarVector) -> Result<ScalarVector, EccError> {
+        let mut value: Vec<Scalar> = Vec::new();
+        let len = self.0.len();
+        if len != _rhs.0.len() { return Err(EccError::ScalarVector) }
+        for i in 0..len {
+            let s = self.0[i].clone() - _rhs.0[i].clone();
+            value.push(s?);
+        }
+        Ok(ScalarVector(value))
+    }
+}
+
+impl std::ops::Mul<ScalarVector> for ScalarVector {
+    type Output = Result<ScalarVector, EccError>;
+    fn mul(self, _rhs: ScalarVector) -> Result<ScalarVector, EccError> {
+        let mut value: Vec<Scalar> = Vec::new();
+        let len = self.0.len();
+        if len != _rhs.0.len() { return Err(EccError::ScalarVector) }
+        for i in 0..len {
+            let s = self.0[i].clone() * _rhs.0[i].clone();
+            value.push(s?);
+        }
+        Ok(ScalarVector(value))
+    }
+}
+
+impl std::ops::Mul<Scalar> for ScalarVector {
+    type Output = Result<ScalarVector, EccError>;
+    fn mul(self, _rhs: Scalar) -> Result<ScalarVector, EccError> {
+        let mut value: Vec<Scalar> = Vec::new();
+        for i in 0..self.0.len() {
+            let s = self.0[i].clone() * _rhs.clone();
+            value.push(s?);
+        }
+        Ok(ScalarVector(value))
+    }
+}
+
+
 // Tests
 //-------------------------------------------------------------------------------
 #[cfg(test)]
@@ -332,6 +399,42 @@ mod tests {
         let prod = g? * scalar_two?;
         let expected = "c9a3f86aae465f0e56513864510f3997561fa2c9e85ea21dc2292309f3cd6022".to_string();
         assert_eq!(expected, prod?.get_hex());
+        Ok(())
+    }
+
+    #[test]
+    fn err_scalar_vector_test() {
+        let mut v1: Vec<BigInt> = Vec::new();
+        let mut v2: Vec<BigInt> = Vec::new();
+        for i in 1..6 {
+            if i < 4 {
+                v1.push(BigInt::from(i));
+            } else {
+                v2.push(BigInt::from(i));
+            }
+        }
+        let sv1 = ScalarVector::new(v1);
+        let sv2 = ScalarVector::new(v2);
+        let sv3 = sv1.unwrap() + sv2.unwrap();
+        assert!(sv3.is_err());
+    }
+
+    #[test]
+    fn add_scalar_vector_test() -> Result<(), EccError> {
+        let mut v1: Vec<BigInt> = Vec::new();
+        let mut v2: Vec<BigInt> = Vec::new();
+        for i in 1..7 {
+            if i < 4 {
+                v1.push(BigInt::from(i));
+            } else {
+                v2.push(BigInt::from(i));
+            }
+        }
+        let sv1 = ScalarVector::new(v1);
+        let sv2 = ScalarVector::new(v2);
+        let sv3= sv1.unwrap() + sv2.unwrap();
+        let five = Scalar::new(BigInt::from(5));
+        assert_eq!(sv3?.0[0].get_dalek(), five?.get_dalek());
         Ok(())
     }
 }
