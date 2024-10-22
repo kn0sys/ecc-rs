@@ -1,10 +1,11 @@
 //! An intuitive ECC library wrapped around Dalek Cryptography for tutorial purposes.
 use curve25519_dalek::{
-    constants::ED25519_BASEPOINT_COMPRESSED,
+    constants,
     edwards::{
         EdwardsPoint,
     },
     scalar::Scalar as DalekScalar,
+    traits::MultiscalarMul,
 };
 use num::{
     bigint::Sign,
@@ -30,7 +31,7 @@ pub struct Scalar {
     hex: String,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Point {
     dalek: EdwardsPoint,
     hex: String
@@ -141,7 +142,7 @@ impl std::ops::Neg for Scalar {
 
 impl Point {
     pub fn base_generator() -> Result<Point, EccError> {
-        let dalek = ED25519_BASEPOINT_COMPRESSED.decompress().unwrap_or_default();
+        let dalek = constants::ED25519_BASEPOINT_COMPRESSED.decompress().unwrap_or_default();
         let hex = to_hex(BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes()));
         Ok(Point { dalek, hex })
     }
@@ -187,6 +188,16 @@ impl std::ops::Mul<Scalar> for Point {
         let bi = BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes());
         let hex = to_hex(bi);
         Ok( Point {dalek, hex })
+    }
+}
+
+impl std::ops::Neg for Point {
+    type Output = Result<Point, EccError>;
+    fn neg(self) -> Result<Point, EccError> {
+        let dalek = -self.get_dalek();
+        let bi = BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes());
+        let hex = to_hex(bi);
+        Ok( Point {dalek, hex } )
     }
 }
 
@@ -311,6 +322,89 @@ impl std::ops::Neg for ScalarVector {
             value.push(s?);
         }
         Ok(ScalarVector(value))
+    }
+}
+
+#[derive(Debug)]
+pub struct PointVector(Vec<Point>);
+
+impl PointVector {
+    pub fn new(v: Vec<Point>) -> Result<PointVector, EccError> {
+        Ok(PointVector(v))
+    }
+    /// Multiscalar mulitplication - ScalarVector**PointVector
+    pub fn multiexp(&self, sv: ScalarVector) -> Result<Point, EccError> {
+       let points: Vec<EdwardsPoint> = self.0.iter().map(|p| p.get_dalek()).collect();
+       let scalars: Vec<DalekScalar> = sv.0.iter().map(|s| s.get_dalek()).collect();
+       let dalek = EdwardsPoint::multiscalar_mul(scalars, points);
+       let hex = to_hex(BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes()));
+       Ok(Point { dalek, hex })
+    }
+}
+
+impl std::ops::Add<PointVector> for PointVector {
+    type Output = Result<PointVector, EccError>;
+    fn add(self, _rhs: PointVector) -> Result<PointVector, EccError> {
+        let mut value: Vec<Point> = Vec::new();
+        let len = self.0.len();
+        if len != _rhs.0.len() { return Err(EccError::PointVector) }
+        for i in 0..len {
+            let s = self.0[i].clone() + _rhs.0[i].clone();
+            value.push(s?);
+        }
+        Ok(PointVector(value))
+    }
+}
+
+impl std::ops::Sub<PointVector> for PointVector {
+    type Output = Result<PointVector, EccError>;
+    fn sub(self, _rhs: PointVector) -> Result<PointVector, EccError> {
+        let mut value: Vec<Point> = Vec::new();
+        let len = self.0.len();
+        if len != _rhs.0.len() { return Err(EccError::PointVector) }
+        for i in 0..len {
+            let s = self.0[i].clone() - _rhs.0[i].clone();
+            value.push(s?);
+        }
+        Ok(PointVector(value))
+    }
+}
+
+impl std::ops::Mul<ScalarVector> for PointVector {
+    type Output = Result<PointVector, EccError>;
+    fn mul(self, _rhs: ScalarVector) -> Result<PointVector, EccError> {
+        let mut value: Vec<Point> = Vec::new();
+        let len = self.0.len();
+        if len != _rhs.0.len() { return Err(EccError::PointVector) }
+        for i in 0..len {
+            let s = self.0[i].clone() * _rhs.0[i].clone();
+            value.push(s?);
+        }
+        Ok(PointVector(value))
+    }
+}
+
+impl std::ops::Mul<Scalar> for PointVector {
+    type Output = Result<PointVector, EccError>;
+    fn mul(self, _rhs: Scalar) -> Result<PointVector, EccError> {
+        let mut value: Vec<Point> = Vec::new();
+        for i in 0..self.0.len() {
+            let s = self.0[i].clone() * _rhs.clone();
+            value.push(s?);
+        }
+        Ok(PointVector(value))
+    }
+}
+
+impl std::ops::Neg for PointVector {
+    type Output = Result<PointVector, EccError>;
+    fn neg(self) -> Result<PointVector, EccError> {
+        let mut value: Vec<Point> = Vec::new();
+        for i in 0..self.0.len() {
+            let s = -self.0[i].clone();
+            value.push(s?);
+        }
+        Ok(PointVector(value))
     }
 }
 
@@ -552,5 +646,70 @@ mod tests {
         assert_eq!(expected, sv3?.get_hex());
         Ok(())
     }
+
+    #[test]
+    fn add_point_vector_test() -> Result<(), EccError> {
+        let mut v1: Vec<Point> = Vec::new();
+        let mut v2: Vec<Point> = Vec::new();
+        for i in 1..7 {
+            if i < 4 {
+                v1.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+            } else {
+                v2.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+            }
+        }
+        let sv1 = PointVector::new(v1);
+        let sv2 = PointVector::new(v2);
+        let sv3 = sv1.unwrap() + sv2.unwrap();
+        let expected = "edc876d6831fd2105d0b4389ca2e283166469289146e2ce06faefe98b22548df".to_string();
+        assert_eq!(expected, sv3?.0[0].get_hex());
+        Ok(())
+    }
+    
+     #[test]
+    fn sub_point_vector_test() -> Result<(), EccError> {
+        let mut v1: Vec<Point> = Vec::new();
+        let mut v2: Vec<Point> = Vec::new();
+        for i in 1..7 {
+            if i < 4 {
+                v1.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+            } else {
+                v2.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+            }
+        }
+        let sv1 = PointVector::new(v1);
+        let sv2 = PointVector::new(v2);
+        let sv3 = sv1.unwrap() - sv2.unwrap();
+        let expected = "d4b4f5784868c3020403246717ec169ff79e26608ea126a1ab69ee77d1b16792".to_string();
+        assert_eq!(expected, sv3?.0[0].get_hex());
+        Ok(())
+    }
+
+    #[test]
+    fn multiexp_point_vector_test() -> Result<(), EccError> {
+        let mut v2: Vec<Point> = Vec::new();
+        let mut b1: Vec<BigInt> = Vec::new();
+        let mut b1_copy: Vec<BigInt> = Vec::new();
+        let mut b2: Vec<BigInt> = Vec::new();
+        for i in 1..7 {
+            if i < 4 {
+                b1.push(BigInt::from(i));
+                b1_copy.push(BigInt::from(i));
+            } else {
+                v2.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+                b2.push(BigInt::from(i));
+            }
+        }
+        let pv2 = PointVector::new(v2);
+        let sv1 = ScalarVector::new(b1);
+        let sv1_copy = ScalarVector::new(b1_copy);
+        let sv2 = ScalarVector::new(b2);
+        let p = sv1?.pow(sv2?);
+        let expected = Point::base_generator()? * p?;
+        let actual = pv2?.multiexp(sv1_copy?);
+        assert_eq!(expected?.get_hex(), actual?.get_hex());
+        Ok(())
+    }
+
 }
 
