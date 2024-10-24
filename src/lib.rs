@@ -18,7 +18,7 @@ use sha2::{
 };
 use rand::RngCore;
 
-/// L value as defined at https://datatracker.ietf.org/doc/html/rfc8032 section 5.1
+/// L value as defined at https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
 pub const L: &str = "edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010";
 
 fn l_as_big_int() -> BigInt {
