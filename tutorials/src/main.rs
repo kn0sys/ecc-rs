@@ -1,3 +1,4 @@
+use kn0syseccrs as ecc;
 fn main() {
-    println!("Hello, world!");
+    println!("Hello L: {:?}", ecc::L);
 }
