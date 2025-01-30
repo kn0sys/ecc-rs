@@ -91,7 +91,7 @@ impl Scalar {
     }
     pub fn random() -> Result<Scalar, EccError> {
         let mut data = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut data);
+        rand::rng().fill_bytes(&mut data);
         let dalek = DalekScalar::from_bytes_mod_order(data);
         let bi = BigInt::from_bytes_le(Sign::Plus, dalek.as_bytes());
         Scalar::new(bi)
