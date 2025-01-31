@@ -1,6 +1,6 @@
 [package]
 name = "kn0syseccrs"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Nigel Christian <nigel.christian@hiahatf.org>"]
 documentation = "https://docs.rs/kn0syseccrs"
