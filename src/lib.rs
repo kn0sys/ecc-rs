@@ -17,13 +17,20 @@ use sha2::{
     Sha512,
 };
 use rand::RngCore;
+use std::sync::LazyLock;
 
 /// L value as defined at https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
 pub const L: &str = "edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010";
 
-fn l_as_big_int() -> BigInt {
+static CURVE_L: LazyLock<BigInt> = LazyLock::new(|| {
     BigInt::from_bytes_le(Sign::Plus, &hex::decode(L).unwrap_or_default())
-}
+});
+
+static G: LazyLock<Point> = LazyLock::new(|| {
+    let dalek = constants::ED25519_BASEPOINT_COMPRESSED.decompress().unwrap_or_default();
+    let hex = to_hex(BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes()));
+    Point { dalek, hex }
+});
 
 #[derive(Clone, Debug)]
 pub struct Scalar {
@@ -69,8 +76,8 @@ fn to_hex (mut n: BigInt) -> String {
 
 impl Scalar {
     pub fn new(n: BigInt) -> Result<Self, EccError> {
-        let l = l_as_big_int();
-        if n < BigInt::ZERO || n >= l {
+        let l = &*CURVE_L;
+        if n < BigInt::ZERO || n >= *l {
             return Err(EccError::Scalar);
         }
         let array = big_int_to_array(n.clone());
@@ -141,13 +148,8 @@ impl std::ops::Neg for Scalar {
 }
 
 impl Point {
-    pub fn base_generator() -> Result<Point, EccError> {
-        let dalek = constants::ED25519_BASEPOINT_COMPRESSED.decompress().unwrap_or_default();
-        let hex = to_hex(BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes()));
-        Ok(Point { dalek, hex })
-    }
     pub fn zero() -> Result<Point, EccError> {
-        let z = Point::base_generator()? - Point::base_generator()?;
+        let z = G.clone() - G.clone();
         let point = z?;
         let dalek = point.get_dalek();
         let hex = point.get_hex();
@@ -221,7 +223,7 @@ pub fn hash_to_scalar(s: Vec<&str>) -> Result<Scalar, EccError> {
             hash_container[index] = *byte;
         }
         let hash_value = BigInt::from_bytes_le(Sign::Plus, &hash_container);
-        if hash_value < l_as_big_int() {
+        if hash_value < *CURVE_L {
             return Scalar::new(hash_value)
         }
         result = hex::encode(&hash[..]);
@@ -438,7 +440,7 @@ mod tests {
         let scalar_one = Scalar::new(BigInt::from(1));
         let scalar_two = Scalar::new(BigInt::from(2));
         let diff = scalar_one? - scalar_two?;
-        let expected_bi = l_as_big_int();
+        let expected_bi = &*CURVE_L;
         let expected = Scalar::new(expected_bi - BigInt::from(1));
         assert_eq!(expected?.get_dalek(), diff?.get_dalek());
         Ok(())
@@ -476,7 +478,7 @@ mod tests {
     #[test]
     fn neg_scalar_test() -> Result<(), EccError> {
         let scalar_one = Scalar::new(BigInt::from(1));
-        let expected = to_hex(l_as_big_int() - BigInt::from(1));
+        let expected = to_hex(&*CURVE_L - BigInt::from(1));
         let result = -scalar_one?;
         assert_eq!(expected, result?.get_hex());
         Ok(())
@@ -491,18 +493,17 @@ mod tests {
 
     #[test]
     fn base_generator_test() -> Result<(), EccError> {
-        let g = Point::base_generator();
         let expected = "5866666666666666666666666666666666666666666666666666666666666666".to_string();
-        assert_eq!(expected, g?.get_hex());
+        assert_eq!(expected, G.get_hex());
         Ok(())
     }
 
     #[test]
     fn add_point_test() -> Result<(), EccError> {
-        let g = Point::base_generator();
-        let g_again = Point::base_generator();
+        let g = G.clone();
+        let g_again = G.clone();
         let expected = "c9a3f86aae465f0e56513864510f3997561fa2c9e85ea21dc2292309f3cd6022".to_string();
-        let result = g? + g_again?;
+        let result = g + g_again;
         assert_eq!(expected, result?.get_hex());
         Ok(())
     }
@@ -517,9 +518,8 @@ mod tests {
 
     #[test]
     fn mul_point_test() -> Result<(), EccError> {
-        let g = Point::base_generator();
         let scalar_two = Scalar::new(BigInt::from(2));
-        let prod = g? * scalar_two?;
+        let prod = G.clone() * scalar_two?;
         let expected = "c9a3f86aae465f0e56513864510f3997561fa2c9e85ea21dc2292309f3cd6022".to_string();
         assert_eq!(expected, prod?.get_hex());
         Ok(())
@@ -653,9 +653,9 @@ mod tests {
         let mut v2: Vec<Point> = Vec::new();
         for i in 1..7 {
             if i < 4 {
-                v1.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+                v1.push((G.clone() * Scalar::new(BigInt::from(i))?)?);
             } else {
-                v2.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+                v2.push((G.clone() * Scalar::new(BigInt::from(i))?)?);
             }
         }
         let sv1 = PointVector::new(v1);
@@ -672,9 +672,9 @@ mod tests {
         let mut v2: Vec<Point> = Vec::new();
         for i in 1..7 {
             if i < 4 {
-                v1.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+                v1.push((G.clone() * Scalar::new(BigInt::from(i))?)?);
             } else {
-                v2.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+                v2.push((G.clone() * Scalar::new(BigInt::from(i))?)?);
             }
         }
         let sv1 = PointVector::new(v1);
@@ -696,7 +696,7 @@ mod tests {
                 b1.push(BigInt::from(i));
                 b1_copy.push(BigInt::from(i));
             } else {
-                v2.push((Point::base_generator()? * Scalar::new(BigInt::from(i))?)?);
+                v2.push((G.clone() * Scalar::new(BigInt::from(i))?)?);
                 b2.push(BigInt::from(i));
             }
         }
@@ -705,7 +705,7 @@ mod tests {
         let sv1_copy = ScalarVector::new(b1_copy);
         let sv2 = ScalarVector::new(b2);
         let p = sv1?.pow(sv2?);
-        let expected = Point::base_generator()? * p?;
+        let expected = G.clone() * p?;
         let actual = pv2?.multiexp(sv1_copy?);
         assert_eq!(expected?.get_hex(), actual?.get_hex());
         Ok(())
