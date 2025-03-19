@@ -22,11 +22,11 @@ use std::sync::LazyLock;
 /// L value as defined at https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
 pub const L: &str = "edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010";
 
-static CURVE_L: LazyLock<BigInt> = LazyLock::new(|| {
+pub static CURVE_L: LazyLock<BigInt> = LazyLock::new(|| {
     BigInt::from_bytes_le(Sign::Plus, &hex::decode(L).unwrap_or_default())
 });
 
-static G: LazyLock<Point> = LazyLock::new(|| {
+pub static G: LazyLock<Point> = LazyLock::new(|| {
     let dalek = constants::ED25519_BASEPOINT_COMPRESSED.decompress().unwrap_or_default();
     let hex = to_hex(BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes()));
     Point { dalek, hex }
