@@ -1,34 +1,26 @@
 //! An intuitive ECC library wrapped around Dalek Cryptography for tutorial purposes.
 use curve25519_dalek::{
-    constants,
-    edwards::{
-        EdwardsPoint,
-    },
-    scalar::Scalar as DalekScalar,
-    traits::MultiscalarMul,
+    constants, edwards::EdwardsPoint, scalar::Scalar as DalekScalar, traits::MultiscalarMul,
 };
-use num::{
-    bigint::Sign,
-    BigInt,
-    pow,
-};
-use sha2::{
-    Digest,
-    Sha512,
-};
-use rand::RngCore;
+use num::{bigint::Sign, pow, BigInt};
+use rand::Rng;
+use sha2::{Digest, Sha512};
 use std::sync::LazyLock;
 
 /// L value as defined at https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
 pub const L: &str = "edd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010";
 
-pub static CURVE_L: LazyLock<BigInt> = LazyLock::new(|| {
-    BigInt::from_bytes_le(Sign::Plus, &hex::decode(L).unwrap_or_default())
-});
+pub static CURVE_L: LazyLock<BigInt> =
+    LazyLock::new(|| BigInt::from_bytes_le(Sign::Plus, &hex::decode(L).unwrap_or_default()));
 
 pub static G: LazyLock<Point> = LazyLock::new(|| {
-    let dalek = constants::ED25519_BASEPOINT_COMPRESSED.decompress().unwrap_or_default();
-    let hex = to_hex(BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes()));
+    let dalek = constants::ED25519_BASEPOINT_COMPRESSED
+        .decompress()
+        .unwrap_or_default();
+    let hex = to_hex(BigInt::from_bytes_le(
+        Sign::Plus,
+        dalek.compress().as_bytes(),
+    ));
     Point { dalek, hex }
 });
 
@@ -41,7 +33,7 @@ pub struct Scalar {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Point {
     dalek: EdwardsPoint,
-    hex: String
+    hex: String,
 }
 
 #[derive(Debug)]
@@ -60,9 +52,9 @@ fn big_int_to_array(mut n: BigInt) -> [u8; 32] {
         n = (n - b) / BigInt::from(256);
     }
     array
-} 
+}
 
-fn to_hex (mut n: BigInt) -> String {
+fn to_hex(mut n: BigInt) -> String {
     let mut a = [0u8; 32];
     for (index, _) in a.into_iter().enumerate() {
         let b: BigInt = &n & BigInt::from(255_u8);
@@ -90,7 +82,7 @@ impl Scalar {
         let prod = n.get_dalek() * quo;
         let bi = BigInt::from_bytes_le(Sign::Plus, prod.as_bytes());
         Scalar::new(bi)
-    } 
+    }
     pub fn pow(&self, n: usize) -> Result<Scalar, EccError> {
         let bi = BigInt::from_bytes_le(Sign::Plus, self.get_dalek().as_bytes());
         let result = pow(bi, n);
@@ -113,7 +105,7 @@ impl Scalar {
 
 impl std::ops::Add<Scalar> for Scalar {
     type Output = Result<Scalar, EccError>;
-    fn add (self, _rhs: Scalar) -> Result<Scalar, EccError> {
+    fn add(self, _rhs: Scalar) -> Result<Scalar, EccError> {
         let sum = self.get_dalek() + _rhs.get_dalek();
         let bi = BigInt::from_bytes_le(Sign::Plus, sum.as_bytes());
         Scalar::new(bi)
@@ -169,7 +161,7 @@ impl std::ops::Add<Point> for Point {
         let dalek = self.get_dalek() + _rhs.get_dalek();
         let bi = BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes());
         let hex = to_hex(bi);
-        Ok( Point { dalek, hex } )
+        Ok(Point { dalek, hex })
     }
 }
 
@@ -179,7 +171,7 @@ impl std::ops::Sub<Point> for Point {
         let dalek = self.get_dalek() - _rhs.get_dalek();
         let bi = BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes());
         let hex = to_hex(bi);
-        Ok( Point { dalek, hex } )
+        Ok(Point { dalek, hex })
     }
 }
 
@@ -189,7 +181,7 @@ impl std::ops::Mul<Scalar> for Point {
         let dalek = self.get_dalek() * _rhs.get_dalek();
         let bi = BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes());
         let hex = to_hex(bi);
-        Ok( Point {dalek, hex })
+        Ok(Point { dalek, hex })
     }
 }
 
@@ -199,7 +191,7 @@ impl std::ops::Neg for Point {
         let dalek = -self.get_dalek();
         let bi = BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes());
         let hex = to_hex(bi);
-        Ok( Point {dalek, hex } )
+        Ok(Point { dalek, hex })
     }
 }
 
@@ -224,7 +216,7 @@ pub fn hash_to_scalar(s: Vec<&str>) -> Result<Scalar, EccError> {
         }
         let hash_value = BigInt::from_bytes_le(Sign::Plus, &hash_container);
         if hash_value < *CURVE_L {
-            return Scalar::new(hash_value)
+            return Scalar::new(hash_value);
         }
         result = hex::encode(&hash[..]);
     }
@@ -252,7 +244,9 @@ impl ScalarVector {
     pub fn pow(&self, sv: ScalarVector) -> Result<Scalar, EccError> {
         let len = self.0.len();
         let mut z = Scalar::new(BigInt::from(0));
-        if len != sv.0.len() { return Err(EccError::ScalarVector) }
+        if len != sv.0.len() {
+            return Err(EccError::ScalarVector);
+        }
         for i in 0..len {
             let s = self.0[i].clone() * sv.0[i].clone();
             z = z? + s?;
@@ -266,7 +260,9 @@ impl std::ops::Add<ScalarVector> for ScalarVector {
     fn add(self, _rhs: ScalarVector) -> Result<ScalarVector, EccError> {
         let mut value: Vec<Scalar> = Vec::new();
         let len = self.0.len();
-        if len != _rhs.0.len() { return Err(EccError::ScalarVector) }
+        if len != _rhs.0.len() {
+            return Err(EccError::ScalarVector);
+        }
         for i in 0..len {
             let s = self.0[i].clone() + _rhs.0[i].clone();
             value.push(s?);
@@ -280,7 +276,9 @@ impl std::ops::Sub<ScalarVector> for ScalarVector {
     fn sub(self, _rhs: ScalarVector) -> Result<ScalarVector, EccError> {
         let mut value: Vec<Scalar> = Vec::new();
         let len = self.0.len();
-        if len != _rhs.0.len() { return Err(EccError::ScalarVector) }
+        if len != _rhs.0.len() {
+            return Err(EccError::ScalarVector);
+        }
         for i in 0..len {
             let s = self.0[i].clone() - _rhs.0[i].clone();
             value.push(s?);
@@ -294,7 +292,9 @@ impl std::ops::Mul<ScalarVector> for ScalarVector {
     fn mul(self, _rhs: ScalarVector) -> Result<ScalarVector, EccError> {
         let mut value: Vec<Scalar> = Vec::new();
         let len = self.0.len();
-        if len != _rhs.0.len() { return Err(EccError::ScalarVector) }
+        if len != _rhs.0.len() {
+            return Err(EccError::ScalarVector);
+        }
         for i in 0..len {
             let s = self.0[i].clone() * _rhs.0[i].clone();
             value.push(s?);
@@ -336,11 +336,14 @@ impl PointVector {
     }
     /// Multiscalar mulitplication - ScalarVector**PointVector
     pub fn multiexp(&self, sv: ScalarVector) -> Result<Point, EccError> {
-       let points: Vec<EdwardsPoint> = self.0.iter().map(|p| p.get_dalek()).collect();
-       let scalars: Vec<DalekScalar> = sv.0.iter().map(|s| s.get_dalek()).collect();
-       let dalek = EdwardsPoint::multiscalar_mul(scalars, points);
-       let hex = to_hex(BigInt::from_bytes_le(Sign::Plus, dalek.compress().as_bytes()));
-       Ok(Point { dalek, hex })
+        let points: Vec<EdwardsPoint> = self.0.iter().map(|p| p.get_dalek()).collect();
+        let scalars: Vec<DalekScalar> = sv.0.iter().map(|s| s.get_dalek()).collect();
+        let dalek = EdwardsPoint::multiscalar_mul(scalars, points);
+        let hex = to_hex(BigInt::from_bytes_le(
+            Sign::Plus,
+            dalek.compress().as_bytes(),
+        ));
+        Ok(Point { dalek, hex })
     }
 }
 
@@ -349,7 +352,9 @@ impl std::ops::Add<PointVector> for PointVector {
     fn add(self, _rhs: PointVector) -> Result<PointVector, EccError> {
         let mut value: Vec<Point> = Vec::new();
         let len = self.0.len();
-        if len != _rhs.0.len() { return Err(EccError::PointVector) }
+        if len != _rhs.0.len() {
+            return Err(EccError::PointVector);
+        }
         for i in 0..len {
             let s = self.0[i].clone() + _rhs.0[i].clone();
             value.push(s?);
@@ -363,7 +368,9 @@ impl std::ops::Sub<PointVector> for PointVector {
     fn sub(self, _rhs: PointVector) -> Result<PointVector, EccError> {
         let mut value: Vec<Point> = Vec::new();
         let len = self.0.len();
-        if len != _rhs.0.len() { return Err(EccError::PointVector) }
+        if len != _rhs.0.len() {
+            return Err(EccError::PointVector);
+        }
         for i in 0..len {
             let s = self.0[i].clone() - _rhs.0[i].clone();
             value.push(s?);
@@ -377,7 +384,9 @@ impl std::ops::Mul<ScalarVector> for PointVector {
     fn mul(self, _rhs: ScalarVector) -> Result<PointVector, EccError> {
         let mut value: Vec<Point> = Vec::new();
         let len = self.0.len();
-        if len != _rhs.0.len() { return Err(EccError::PointVector) }
+        if len != _rhs.0.len() {
+            return Err(EccError::PointVector);
+        }
         for i in 0..len {
             let s = self.0[i].clone() * _rhs.0[i].clone();
             value.push(s?);
@@ -424,7 +433,7 @@ mod tests {
         assert_eq!(expected, scalar?.get_hex());
         Ok(())
     }
-    
+
     #[test]
     fn add_scalar_test() -> Result<(), EccError> {
         let scalar_one = Scalar::new(BigInt::from(1));
@@ -493,7 +502,8 @@ mod tests {
 
     #[test]
     fn base_generator_test() -> Result<(), EccError> {
-        let expected = "5866666666666666666666666666666666666666666666666666666666666666".to_string();
+        let expected =
+            "5866666666666666666666666666666666666666666666666666666666666666".to_string();
         assert_eq!(expected, G.get_hex());
         Ok(())
     }
@@ -502,7 +512,8 @@ mod tests {
     fn add_point_test() -> Result<(), EccError> {
         let g = G.clone();
         let g_again = G.clone();
-        let expected = "c9a3f86aae465f0e56513864510f3997561fa2c9e85ea21dc2292309f3cd6022".to_string();
+        let expected =
+            "c9a3f86aae465f0e56513864510f3997561fa2c9e85ea21dc2292309f3cd6022".to_string();
         let result = g + g_again;
         assert_eq!(expected, result?.get_hex());
         Ok(())
@@ -511,7 +522,8 @@ mod tests {
     #[test]
     fn zero_point_test() -> Result<(), EccError> {
         let zero = Point::zero();
-        let expected = "0100000000000000000000000000000000000000000000000000000000000000".to_string();
+        let expected =
+            "0100000000000000000000000000000000000000000000000000000000000000".to_string();
         assert_eq!(zero?.get_hex(), expected);
         Ok(())
     }
@@ -520,7 +532,8 @@ mod tests {
     fn mul_point_test() -> Result<(), EccError> {
         let scalar_two = Scalar::new(BigInt::from(2));
         let prod = G.clone() * scalar_two?;
-        let expected = "c9a3f86aae465f0e56513864510f3997561fa2c9e85ea21dc2292309f3cd6022".to_string();
+        let expected =
+            "c9a3f86aae465f0e56513864510f3997561fa2c9e85ea21dc2292309f3cd6022".to_string();
         assert_eq!(expected, prod?.get_hex());
         Ok(())
     }
@@ -575,7 +588,8 @@ mod tests {
         let sv1 = ScalarVector::new(v1);
         let sv2 = ScalarVector::new(v2);
         let sv3 = sv1.unwrap() - sv2.unwrap();
-        let expected = "ead3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010".to_string();
+        let expected =
+            "ead3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010".to_string();
         assert_eq!(expected, sv3?.0[0].get_hex());
         Ok(())
     }
@@ -603,7 +617,7 @@ mod tests {
     fn sum_all_scalar_vector_test() -> Result<(), EccError> {
         let mut v1: Vec<BigInt> = Vec::new();
         for i in 1..7 {
-            if i  < 4 {
+            if i < 4 {
                 v1.push(BigInt::from(i));
             }
         }
@@ -612,17 +626,18 @@ mod tests {
         assert_eq!(expected?.get_hex(), sv1?.sum_of_all()?.get_hex());
         Ok(())
     }
-    
+
     #[test]
     fn neg_scalar_vector_test() -> Result<(), EccError> {
         let mut v1: Vec<BigInt> = Vec::new();
         for i in 1..7 {
-            if i  < 4 {
+            if i < 4 {
                 v1.push(BigInt::from(i));
             }
         }
         let sv1 = ScalarVector::new(v1);
-        let expected = "ecd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010".to_string();
+        let expected =
+            "ecd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010".to_string();
         let r_sv = -sv1?;
         assert_eq!(expected, r_sv?.0[0].get_hex());
         Ok(())
@@ -642,7 +657,8 @@ mod tests {
         let sv1 = ScalarVector::new(v1);
         let sv2 = ScalarVector::new(v2);
         let sv3 = sv1?.pow(sv2?);
-        let expected = "2000000000000000000000000000000000000000000000000000000000000000".to_string();
+        let expected =
+            "2000000000000000000000000000000000000000000000000000000000000000".to_string();
         assert_eq!(expected, sv3?.get_hex());
         Ok(())
     }
@@ -661,12 +677,13 @@ mod tests {
         let sv1 = PointVector::new(v1);
         let sv2 = PointVector::new(v2);
         let sv3 = sv1.unwrap() + sv2.unwrap();
-        let expected = "edc876d6831fd2105d0b4389ca2e283166469289146e2ce06faefe98b22548df".to_string();
+        let expected =
+            "edc876d6831fd2105d0b4389ca2e283166469289146e2ce06faefe98b22548df".to_string();
         assert_eq!(expected, sv3?.0[0].get_hex());
         Ok(())
     }
-    
-     #[test]
+
+    #[test]
     fn sub_point_vector_test() -> Result<(), EccError> {
         let mut v1: Vec<Point> = Vec::new();
         let mut v2: Vec<Point> = Vec::new();
@@ -680,7 +697,8 @@ mod tests {
         let sv1 = PointVector::new(v1);
         let sv2 = PointVector::new(v2);
         let sv3 = sv1.unwrap() - sv2.unwrap();
-        let expected = "d4b4f5784868c3020403246717ec169ff79e26608ea126a1ab69ee77d1b16792".to_string();
+        let expected =
+            "d4b4f5784868c3020403246717ec169ff79e26608ea126a1ab69ee77d1b16792".to_string();
         assert_eq!(expected, sv3?.0[0].get_hex());
         Ok(())
     }
@@ -710,6 +728,4 @@ mod tests {
         assert_eq!(expected?.get_hex(), actual?.get_hex());
         Ok(())
     }
-
 }
-
